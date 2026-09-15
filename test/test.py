@@ -23,18 +23,27 @@ async def test_project(dut):
     await ClockCycles(dut.clk, 10)
     dut.rst_n.value = 1
 
-    dut._log.info("Test project behavior")
+    dut._log.info("Run the CPU and check the OUT sequence")
 
-    # Set the input values you want to test
-    dut.ui_in.value = 20
-    dut.uio_in.value = 30
+    # Demo program computes (3+4)=7, XORs with 9 -> 14, inverts -> 0xF1,
+    # printing each result via OUT, then halts.
+    expected = [7, 14, 0xF1]
+    seen = []
+    prev = None
 
-    # Wait for one clock cycle to see the output values
-    await ClockCycles(dut.clk, 1)
+    # 10 instructions x 2 cycles/instruction + margin
+    for _ in range(60):
+        await ClockCycles(dut.clk, 1)
+        val = int(dut.uo_out.value)
+        if prev is not None and val != prev:
+            seen.append(val)
+        prev = val
 
-    # The following assersion is just an example of how to check the output values.
-    # Change it to match the actual expected output of your module:
-    assert dut.uo_out.value == 50
+    dut._log.info(f"Observed OUT sequence: {[hex(v) for v in seen]}")
+    assert seen == expected, f"Expected {expected}, got {seen}"
 
-    # Keep testing the module by changing the input values, waiting for
-    # one or more clock cycles, and asserting the expected output values.
+    # uio_out[7] is the halted flag -- confirm the CPU actually stopped
+    halted = (int(dut.uio_out.value) >> 7) & 1
+    assert halted == 1, "CPU did not halt as expected"
+
+    dut._log.info("PASS: mini CPU output sequence and halt behaviour correct")
